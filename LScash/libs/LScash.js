@@ -1,110 +1,148 @@
 //parameter variables (global)
 	//compression type
-	var NO_COMPRESSION = 0;
-	var DEFAULT_COMPRESSION = 1;
-	var COMPATIBILITY_COMPRESSION = 2;
-	
-	//enable / disable expiredate
-	var NO_EXPIRE_DATE = 0;
-	var EXPIRE_DATE = 1;
-	
-	//direct storage
-	var DISABLE_DIRECT_STORAGE = 0;
-	var ENABLE_DIRECT_STORAGE = 1;
+	var DISABLE       = 0;
+	var ENABLE        = 1;
+	var DEFAULT       = 1;
+	var COMPATIBILITY = 2;
 
 var LScash = (function() {
 	var LScash = {
-		init : function(compression_type, enable_expiredate) {
-			_compression_type = compression_type || 0;
-			_enable_expiredate = enable_expiredate || 0;
-			
+		init : function(compression_type, expiredate, storagesize) {
+			_compression_type = compression_type || DISABLE;
+			_expiredate = expiredate || DISABLE;
+			_storagesize = storagesize || 5*1024*1024; //5MB is default
+
 			//after initialization, the cash is loaded
 			return LScash.reload();
 		},
-		
-		add : function(objectname, object, expiretime, enable_direct_storage) {
-			enable_direct_storage = enable_direct_storage || 1; //per default, direct storage is activated
-			
+
+		add : function(objectname_v, object_v, expiretime_v, direct_storage) {
+			direct_storage = direct_storage || ENABLE; //per default, direct storage is enabled
+
 			//parameters not given
-			if (objectname == ( '' || undefined ) || object == undefined)
+			if (objectname_v == ( '' || undefined ) || object_v == undefined)
 				return false;
-			
+
 			//error, when objectname is already given
-			if (_data[objectname] != undefined)
+			if (_data[objectname_v] != undefined)
 				return false;
-			
+
 			//expiretime
-			if (expiretime == ( undefined || 0 ) )
-				_data[objectname].exp = 0;
+			if (expiretime_v == ( undefined || 0 ) )
+				_data[objectname_v].exp = 0;
 			else
-				_data[objectname].exp = expiretime; //TODO calc real time 
-			
-			_data[objectname].obj = object;
+				_data[objectname_v].exp = new Date().getTime() + expiretime_v; //calc real time in ms after 01/01/1970
+
+			_data[objectname_v].obj = object_v;
+
+			//if direct storage is enabled, encode and store new data
+			if (direct_storage == ENABLE) {
+				return _storeObject(JSON.stringify(_data));
+			}
+
 			return true;
 		},
-		
-		update : function () {
+
+		update : function (objectname_v) {
 			//error, when objectname is not given
-			if (_data[objectname] == undefined)
+			if (_data[objectname_v] == undefined)
 				return false;
-			
+
 			_data[objectname] = object;
 			return true;
 		},
-		
+
 		remove : function() {
-			
+
 		},
-		
+
+		add_image : function() {
+
+		},
+
+		get_image : function() {
+
+		},
+
+		update_image : function() {
+
+		},
+
 		get : function() {
-			
+
 		},
-		
-		get_and_remove : function() {
-			
-		},
-		
+
 		set_expire : function() {
-			
+
 		},
-		
+
 		get_expire : function() {
-			
+
 		},
-		
+
 		store : function() {
-			
+			return _storeObject(JSON.stringify(_data));
 		},
-		
+
 		reload : function() {
 			return true;
+		},
+
+		//returns size currently used in localStorage
+		get_size : function() {
+			return _data_string.length;
+		},
+
+		get_stored_list : function() {
+			return Object.keys(_data);
 		}
 	};
-	
+
 	//private functions
-	var _storeObject = function (object) {
-		
+	var _storeObject = function (object_string) {
+		var compressed = "";
+
+		if (_compression_type == DISABLE)
+			compressed = object_string;
+		if (_compression_type == DEFAULT)
+			compressed = compress(object_string);
+		if (_compression_type == COMPATIBILITY)
+			compressed = compressFromUTF16(object_string);
+
+		//store data in localStorage
+		if (compressed.length <= _storagesize) {
+			localStorage.setItem("__LScash_data__", compressed);
+			return true;
+		}
+
+		return false;
 	};
-	
+
+	//returns JSON string of stored object
 	var _loadObject = function () {
 		var compressed = localStorage.getItem("__LScash_data__");
-		if (_compression_type == NO_COMPRESSION)
+
+		if (compressed = undefined)
+			return "";
+
+		if (_compression_type == DISABLE)
 			return compressed;
-		if (_compression_type == DEFAULT_COMPRESSION)
+		if (_compression_type == DEFAULT)
 			return decompress(compressed);
-		if (_compression_type == COMPATIBILITY_COMPRESSION)
+		if (_compression_type == COMPATIBILITY)
 			return decompressFromUTF16(compressed);
 	};
-	
+
 	//these values are private
 	var _compression_type = 0;
-	var _enable_expiredate = 0;
-	
+	var _expiredate = 0;
+	var _storagesize = 0;
+
 	var _data = { //uncompressed data
 		test: "hallo"
 	};
-	
+	var _data_string = "";
+
+
 	return LScash;
 })();
-
-console.log(LScash.get());
