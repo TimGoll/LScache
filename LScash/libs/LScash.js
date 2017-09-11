@@ -7,7 +7,7 @@
 
 var LScash = (function() {
 	var LScash = {
-		init : function(compression_type, expiredate, storagesize) {
+		init : function({compression_type, expiredate, storagesize} = {}) {
 			_compression_type = compression_type || DISABLE;
 			_expiredate = expiredate || DISABLE;
 			_storagesize = storagesize || 5*1024*1024; //5MB is default
@@ -16,44 +16,71 @@ var LScash = (function() {
 			return LScash.reload();
 		},
 
-		add : function(objectname_v, object_v, expiretime_v, direct_storage) {
+		add : function(objectname_v, object_v, {expiretime, direct_storage} = {}) {
 			direct_storage = direct_storage || ENABLE; //per default, direct storage is enabled
 
-			//parameters not given
-			if (objectname_v == ( '' || undefined ) || object_v == undefined)
+			//false, if parameters not given
+			if (objectname_v == '' || objectname_v == undefined || object_v == undefined)
 				return false;
 
-			//error, when objectname is already given
+			//false, if objectname is already given
 			if (_data[objectname_v] != undefined)
 				return false;
 
+			//create new enty
+			_data[objectname_v] = {};
+
 			//expiretime
-			if (expiretime_v == ( undefined || 0 ) )
-				_data[objectname_v].exp = 0;
-			else
-				_data[objectname_v].exp = new Date().getTime() + expiretime_v; //calc real time in ms after 01/01/1970
+			if (_expiredate == ENABLE) {
+				if (expiretime == undefined || expiretime == 0) {
+					_data[objectname_v].exp = 0;
+				} else {
+					_data[objectname_v].exp = new Date().getTime() + expiretime; //calc real time in ms after 01/01/1970
+					_set_expire_event(objectname_v, new Date().getTime() + expiretime);
+				}
+			}
 
 			_data[objectname_v].obj = object_v;
 
 			//if direct storage is enabled, encode and store new data
 			if (direct_storage == ENABLE) {
-				return _storeObject(JSON.stringify(_data));
+				if (!_storeObject(JSON.stringify(_data))) {
+					delete _data[objectname_v];
+					return false;
+				}
+				return true;
 			}
 
 			return true;
 		},
 
-		update : function (objectname_v) {
-			//error, when objectname is not given
+		update : function (objectname_v, object_v, {expiretime, direct_storage} = {}) {
+			//false, if objectname is not given
 			if (_data[objectname_v] == undefined)
 				return false;
 
-			_data[objectname] = object;
-			return true;
+			//if no new expiredate is set, use the old one
+			if (expiretime == undefined && _data[objectname_v].exp != undefined)
+				expiretime = this.get_expiretime(objectname_v);
+
+			this.remove(objectname_v, {direct_storage: DISABLE}); //disable because add() (next step) stores direct
+			return this.add(objectname_v, object_v, {expiretime: expiretime, direct_storage: direct_storage});
 		},
 
-		remove : function() {
+		get : function(objectname_v) {
+			//false, if objectname is not given
+			if (_data[objectname_v] == undefined)
+				return false;
 
+			//false, when data is expired
+			if (_expiredate == ENABLE) {
+				if (_data[objectname_v].exp != 0 && new Date().getTime() >= _data[objectname_v].exp) {
+					this.remove(objectname_v, {direct_storage: ENABLE});
+					return false;
+				}
+			}
+
+			return _data[objectname_v].obj;
 		},
 
 		add_image : function() {
@@ -68,16 +95,65 @@ var LScash = (function() {
 
 		},
 
-		get : function() {
+		remove : function(objectname_v, {direct_storage} = {}) {
+			direct_storage = direct_storage || ENABLE; //per default, direct storage is enabled
 
+			if (_data[objectname_v] != undefined)
+				delete _data[objectname_v];
+			else
+				return false;
+
+			if (direct_storage == ENABLE) {
+				if (!_storeObject(JSON.stringify(_data)))
+					return false
+				return true;
+			}
+			return true;
 		},
 
-		set_expire : function() {
-
+		remove_all : function() {
+			var list = this.get_stored_list();
+			for (var id in list)
+				this.remove(list[id], {direct_storage: DISABLE});
+			this.store();
+			return true;
 		},
 
-		get_expire : function() {
+		get_expiretime : function(objectname_v) {
+			//false, if objectname is not given
+			if (_data[objectname_v] == undefined)
+				return false;
 
+			//expires never
+			if (_data[objectname_v].exp == 0)
+				return false;
+
+			return _data[objectname_v].exp - new Date().getTime();
+		},
+
+		update_expiretime : function(objectname_v, {expiretime, direct_storage} = {}) {
+			direct_storage = direct_storage || ENABLE; //per default, direct storage is enabled
+
+			//false, if objectname is not given
+			if (_data[objectname_v] == undefined)
+				return false;
+
+			//expiretime
+			if (_expiredate == ENABLE) {
+				if (expiretime == undefined || expiretime == 0) {
+					_data[objectname_v].exp = 0;
+				} else {
+					_data[objectname_v].exp = new Date().getTime() + expiretime; //calc real time in ms after 01/01/1970
+					_set_expire_event(objectname_v, new Date().getTime() + expiretime);
+				}
+			}
+
+			if (direct_storage == ENABLE) {
+				if (!_storeObject(JSON.stringify(_data)))
+					return false
+				return true;
+			}
+			return true;
 		},
 
 		store : function() {
@@ -85,6 +161,17 @@ var LScash = (function() {
 		},
 
 		reload : function() {
+			_loadObject();
+
+			_data = JSON.parse(_data_string);
+
+			//for security: ignore if expire is enabled
+			var list = this.get_stored_list();
+			for (var id in list) {
+				if (_data[list[id]].exp != undefined && _data[list[id]].exp != 0)
+					_set_expire_event(list[id], _data[list[id]].exp);
+			}
+
 			return true;
 		},
 
@@ -120,7 +207,7 @@ var LScash = (function() {
 
 	//returns JSON string of stored object
 	var _loadObject = function () {
-		var compressed = localStorage.getItem("__LScash_data__");
+		_data_string = localStorage.getItem("__LScash_data__");
 
 		if (compressed = undefined)
 			return "";
@@ -133,13 +220,23 @@ var LScash = (function() {
 			return decompressFromUTF16(compressed);
 	};
 
+	var _set_expire_event = function(objectname_v, expiretime) {
+		window.setTimeout(function() {
+			//just delete, if expiretime wasn't changed
+			if (_data[objectname_v] != undefined) {
+				if (new Date().getTime() >= _data[objectname_v].exp && _data[objectname_v].exp != 0)
+					LScash.remove(objectname_v, {direct_storage: ENABLE});
+			}
+		}, expiretime - new Date().getTime());
+	}
+
 	//these values are private
 	var _compression_type = 0;
 	var _expiredate = 0;
 	var _storagesize = 0;
 
 	var _data = { //uncompressed data
-		test: "hallo"
+
 	};
 	var _data_string = "";
 

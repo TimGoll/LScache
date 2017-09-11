@@ -27,7 +27,7 @@ Falls die Komprimierungsfunktion der Bibliothek aktiviert werden soll, muss auß
 
 ### Initialisierung
 ```js
-LScash.init([compression_type], [expiredate], [storagesize]);
+LScash.init({[compression_type], [expiredate], [storagesize]});
 //compression_type : DISABLE, DEFAULT, COMPATIBILITY [default: DISABLE]
 //expiredate       : DISABLE, ENABLE [default: DISABLE]
 //storagesize      : size in Bytes [default: 5.242.880 Bytes]
@@ -46,7 +46,7 @@ bla
 Eine empfohlene Implementierung würde wie folgt aussehen:
 ```js
 window.onload = function() {
-    LScash.init(DEFAULT, ENABLE);
+    LScash.init({compression_type: DEFAULT, expiredate: ENABLE});
 };
 ```
 
