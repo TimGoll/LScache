@@ -27,31 +27,134 @@ Falls die Komprimierungsfunktion der Bibliothek aktiviert werden soll, muss auß
 
 ### Initialisierung
 ```js
-LScash.init({[compression_type], [expiredate], [storagesize]});
+LScash.init({[compression_type]});
 //compression_type : DISABLE, DEFAULT, COMPATIBILITY [default: DISABLE]
-//expiredate       : DISABLE, ENABLE [default: DISABLE]
-//storagesize      : size in Bytes [default: 5.242.880 Bytes]
 ```
-Alle drei Parameter der ```init()``` Funktion sind optional, es ist aber dennoch empfohlen diese beispielsweise in einem ```window.onlaod``` Event auszuführen, um auch gleichzeitig die Daten aus dem Cash (falls vorhanden) zu laden.
+Der Parameter der ```init()``` Funktion ist optional und sollte gesetzt werden, wenn der Cash für Bilder verwendet werden soll. Die init() Funktion sollte auf jeden Fall beim Laden der Seite ausgeführt werden, da sonst zum Beispiel Eventlistener nicht funktionieren.
 
-#### Compression Type
+**Compression Type:**<br>
 bla
 
-#### Expiredate
-bla
-
-#### Storagesize
-bla
-
-Eine empfohlene Implementierung würde wie folgt aussehen:
+**Beispiel:**
 ```js
 window.onload = function() {
-    LScash.init({compression_type: DEFAULT, expiredate: ENABLE});
+    LScash.init({compression_type: DEFAULT});
 };
 ```
 
+### Element hinzufügen
+```js
+LScash.add(objectname, object, {[expiretime]});
+```
+
+**Beispiel:**
+```js
+var my_object = {
+    key_1 : "beliebiger Eintrag",
+    key_2 : [1, 5, 8],
+    key_3 : {
+        a: 19,
+        b: 5
+    }
+};
+
+var my_string = "Hallo Welt!";
+
+LScash.add('my_object', my_object); // >>> true
+LScash.add('my_object', my_string); // >>> false
+LScash.add('my_string', my_string); // >>> true
+```
+
+### Element aktualisieren
+```js
+LScash.update(objectname, object, {[expiretime]});
+```
+
+**Beispiel:**
+```js
+var my_string = "Hallo schöne Welt!";
+
+LScash.add('my_random_key', my_string); // >>> false
+LScash.add('my_string', my_string);     // >>> true
+```
+
+### Element bekommen
+```js
+LScash.get(objectname);
+```
+
+**Beispiel:**
+```js
+var my_string = "Hallo schöne Welt!";
+
+LScash.get('my_random_key');    // >>> false
+LScash.get('my_string')         // >>> "Hallo schöne Welt!"
+```
+
+### Element löschen
+```js
+LScash.remove(objectname);
+```
+
+### alle Elemente löschen
+```js
+LScash.remove_all(objectname);
+```
+
+### EventListener hinzufügen
+```js
+LScash.addEventListener(type, function_pointer);
+```
+
+**Beispiel:**
+```js
+var my_callbackFunction = function(event) {
+    console.log(event.key);
+    console.log(event.obj);
+};
+
+LScash.addEventListener('added', my_callbackFunction); // >>> true
+```
+
+### EventListener entfernen
+```js
+LScash.removeEventListener(type);
+```
+
+**Beispiel:**
+```js
+LScash.addEventListener('added');
+```
+
+### Zeit bis zur Ungültigkeit aktualisieren
+```js
+LScash.update_expiretime(objectname, {expiretime});
+```
+
+### Zeit bis zur Ungültigkeit abfragen
+```js
+LScash.get_expiretime(objectname);
+```
+
+### Größe des belegten Speichers bestimmen
+```js
+LScash.get_size();
+```
+
+### Liste aller Elemente im Speicher auslesen
+```js
+LScash.get_stored_list();
+```
+
+
 ## ajaxHandler
+callback Funktionen verwalten
 
 ## Popup Generator
+resizable, moveable, button area, title area, html fillable main area
 
 ## simple Imagebox
+wie Lightbox, nur ohne jquery und all dem overhead
+
+## Input Checker
+Password, Email, textlength, date

@@ -1,86 +1,118 @@
 //parameter variables (global)
 	//compression type
 	var DISABLE       = 0;
-	var ENABLE        = 1;
 	var DEFAULT       = 1;
 	var COMPATIBILITY = 2;
 
 var LScash = (function() {
 	var LScash = {
-		init : function({compression_type, expiredate, storagesize} = {}) {
+		init : function(compression_type) {
 			_compression_type = compression_type || DISABLE;
-			_expiredate = expiredate || DISABLE;
-			_storagesize = storagesize || 5*1024*1024; //5MB is default
+
+			//add event for storage change
+			window.addEventListener('storage', _on_storage_change, false);
 
 			//after initialization, the cash is loaded
-			return LScash.reload();
+			return handle_expire_on_load();
 		},
 
-		add : function(objectname_v, object_v, {expiretime, direct_storage} = {}) {
-			direct_storage = direct_storage || ENABLE; //per default, direct storage is enabled
+		addEventListener : function(type, functionPointer) {
+			if (type.toLowerCase() == "changed")
+				_callbackfunction_changed = functionPointer;
+			else if (type.toLowerCase() == "added")
+				_callbackfunction_added = functionPointer;
+			else if (type.toLowerCase() == "removed")
+				_callbackfunction_removed = functionPointer;
+			else if (type.toLowerCase() == "expired")
+				_callbackfunction_expired = functionPointer;
+			else
+				return false;
+			return true;
+		},
 
+		removeEventListener : function(type) {
+			if (type.toLowerCase() == "changed")
+				_callbackfunction_changed = undefined;
+			else if (type.toLowerCase() == "added")
+				_callbackfunction_added = undefined;
+			else if (type.toLowerCase() == "removed")
+				_callbackfunction_removed = undefined;
+			else if (type.toLowerCase() == "expired")
+				_callbackfunction_expired = undefined;
+			else
+				return false;
+			return true;
+		},
+
+		add : function(objectname_v, object_v, {expiretime} = {}) {
 			//false, if parameters not given
 			if (objectname_v == '' || objectname_v == undefined || object_v == undefined)
 				return false;
 
 			//false, if objectname is already given
-			if (_data[objectname_v] != undefined)
+			if (window.localStorage[objectname_v] != undefined)
 				return false;
 
-			//create new enty
-			_data[objectname_v] = {};
-
-			//expiretime
-			if (_expiredate == ENABLE) {
+			//try to store
+			try {
 				if (expiretime == undefined || expiretime == 0) {
-					_data[objectname_v].exp = 0;
+					window.localStorage[objectname_v] = JSON.stringify({obj: object_v, exp: 0});
 				} else {
-					_data[objectname_v].exp = new Date().getTime() + expiretime; //calc real time in ms after 01/01/1970
+					window.localStorage[objectname_v] = JSON.stringify({obj: object_v, exp: new Date().getTime() + expiretime});
 					_set_expire_event(objectname_v, new Date().getTime() + expiretime);
 				}
-			}
-
-			_data[objectname_v].obj = object_v;
-
-			//if direct storage is enabled, encode and store new data
-			if (direct_storage == ENABLE) {
-				if (!_storeObject(JSON.stringify(_data))) {
-					delete _data[objectname_v];
-					return false;
-				}
-				return true;
-			}
+			} catch (e) {
+		        //error occured, update of storage failed
+				console.log("[LScash] update of storage failed.");
+				return false;
+		    }
 
 			return true;
 		},
 
-		update : function (objectname_v, object_v, {expiretime, direct_storage} = {}) {
+		update : function (objectname_v, object_v, {expiretime} = {}) {
 			//false, if objectname is not given
-			if (_data[objectname_v] == undefined)
+			if (window.localStorage[objectname_v] == undefined)
 				return false;
 
 			//if no new expiredate is set, use the old one
-			if (expiretime == undefined && _data[objectname_v].exp != undefined)
+			if (expiretime == undefined)
 				expiretime = this.get_expiretime(objectname_v);
 
-			this.remove(objectname_v, {direct_storage: DISABLE}); //disable because add() (next step) stores direct
-			return this.add(objectname_v, object_v, {expiretime: expiretime, direct_storage: direct_storage});
+			//try to store
+			try {
+				if (expiretime == undefined || expiretime == false) {
+					window.localStorage[objectname_v] = JSON.stringify({obj: object_v, exp: 0});
+				} else {
+					//remove expire event if defined
+					if (_expire_events[objectname_v] != undefined) {
+						clearTimeout(_expire_events[objectname_v]);
+						delete _expire_events[objectname_v];
+					}
+					window.localStorage[objectname_v] = JSON.stringify({obj: object_v, exp: new Date().getTime() + expiretime});
+					_set_expire_event(objectname_v, new Date().getTime() + expiretime);
+				}
+			} catch (e) {
+		        //error occured, update of storage failed
+				console.log("[LScash] update of storage failed.");
+				return false;
+		    }
+
+			return true;
 		},
 
 		get : function(objectname_v) {
 			//false, if objectname is not given
-			if (_data[objectname_v] == undefined)
+			if (window.localStorage[objectname_v] == undefined)
 				return false;
 
-			//false, when data is expired
-			if (_expiredate == ENABLE) {
-				if (_data[objectname_v].exp != 0 && new Date().getTime() >= _data[objectname_v].exp) {
-					this.remove(objectname_v, {direct_storage: ENABLE});
-					return false;
-				}
-			}
+			var obj = JSON.parse(window.localStorage[objectname_v]);
 
-			return _data[objectname_v].obj;
+			//false, if expired and "creation tab" is closed
+			if (new Date().getTime() >= obj.exp)
+				return false;
+
+			return obj.obj;
 		},
 
 		add_image : function() {
@@ -95,151 +127,143 @@ var LScash = (function() {
 
 		},
 
-		remove : function(objectname_v, {direct_storage} = {}) {
-			direct_storage = direct_storage || ENABLE; //per default, direct storage is enabled
-
-			if (_data[objectname_v] != undefined)
-				delete _data[objectname_v];
-			else
+		remove : function(objectname_v) {
+			//false, if objectname is not given
+			if (window.localStorage[objectname_v] == undefined)
 				return false;
 
-			if (direct_storage == ENABLE) {
-				if (!_storeObject(JSON.stringify(_data)))
-					return false
-				return true;
+			//remove expire event if defined
+			if (_expire_events[objectname_v] != undefined) {
+				clearTimeout(_expire_events[objectname_v]);
+				delete _expire_events[objectname_v];
 			}
+
+			window.localStorage.removeItem(objectname_v);
+
 			return true;
 		},
 
 		remove_all : function() {
-			var list = this.get_stored_list();
-			for (var id in list)
-				this.remove(list[id], {direct_storage: DISABLE});
-			this.store();
+			window.localStorage.clear();
 			return true;
 		},
 
 		get_expiretime : function(objectname_v) {
 			//false, if objectname is not given
-			if (_data[objectname_v] == undefined)
+			if (window.localStorage[objectname_v] == undefined)
+				return false;
+
+			var obj = JSON.parse(window.localStorage[objectname_v]);
+
+			//exp not defined
+			if (obj.exp == undefined)
 				return false;
 
 			//expires never
-			if (_data[objectname_v].exp == 0)
+			if (obj.exp == 0)
 				return false;
 
-			return _data[objectname_v].exp - new Date().getTime();
+			return obj.exp - new Date().getTime();
 		},
 
-		update_expiretime : function(objectname_v, {expiretime, direct_storage} = {}) {
-			direct_storage = direct_storage || ENABLE; //per default, direct storage is enabled
-
+		update_expiretime : function(objectname_v, {expiretime} = {}) {
 			//false, if objectname is not given
-			if (_data[objectname_v] == undefined)
+			if (window.localStorage[objectname_v] == undefined)
 				return false;
 
-			//expiretime
-			if (_expiredate == ENABLE) {
-				if (expiretime == undefined || expiretime == 0) {
-					_data[objectname_v].exp = 0;
-				} else {
-					_data[objectname_v].exp = new Date().getTime() + expiretime; //calc real time in ms after 01/01/1970
-					_set_expire_event(objectname_v, new Date().getTime() + expiretime);
-				}
-			}
+			var obj = JSON.parse(window.localStorage[objectname_v]);
 
-			if (direct_storage == ENABLE) {
-				if (!_storeObject(JSON.stringify(_data)))
-					return false
-				return true;
-			}
-			return true;
-		},
-
-		store : function() {
-			return _storeObject(JSON.stringify(_data));
-		},
-
-		reload : function() {
-			_loadObject();
-
-			_data = JSON.parse(_data_string);
-
-			//for security: ignore if expire is enabled
-			var list = this.get_stored_list();
-			for (var id in list) {
-				if (_data[list[id]].exp != undefined && _data[list[id]].exp != 0)
-					_set_expire_event(list[id], _data[list[id]].exp);
-			}
-
-			return true;
+			return this.update(objectname_v, obj.obj, expiretime);
 		},
 
 		//returns size currently used in localStorage
 		get_size : function() {
-			return _data_string.length;
+			var length = 0;
+
+			var list = this.get_stored_list();
+			for (var id in list)
+				length += window.localStorage[list[id]].length;
+
+			return length;
 		},
 
 		get_stored_list : function() {
-			return Object.keys(_data);
+			if (window.localStorage.length === 0)
+				return [];
+			return Object.keys(window.localStorage);
 		}
 	};
 
-	//private functions
-	var _storeObject = function (object_string) {
-		var compressed = "";
+	var _on_storage_change = function(event) {
+		var _key = event.key;
+		var _new = event.newValue;
+		var _old = event.oldValue;
 
-		if (_compression_type == DISABLE)
-			compressed = object_string;
-		if (_compression_type == DEFAULT)
-			compressed = compress(object_string);
-		if (_compression_type == COMPATIBILITY)
-			compressed = compressFromUTF16(object_string);
+		if (_new == null && _old != null) {
+			var obj = JSON.parse(_old);
+			if (obj.exp == 0 || new Date().getTime() < obj.exp) {
+				if (_callbackfunction_removed != undefined)
+					_callbackfunction_removed({key: _key, obj: obj.obj});
+				console.log("[LScash] Object removed: localStorage['" + _key + "']");
+			} else {
+				if (_callbackfunction_expired != undefined)
+					_callbackfunction_expired({key: _key, obj: obj.obj});
+				console.log("[LScash] Object expired: localStorage['" + _key + "']");
+			}
+		}
+		if (_old == null && _new != null) {
+			if (_callbackfunction_added != undefined)
+				_callbackfunction_added({key: _key, obj: JSON.parse(_new).obj});
+			console.log("[LScash] Object added: localStorage['" + _key + "']");
+		}
+		if (_old != null && _new != null) {
+			if (_callbackfunction_changed != undefined)
+				_callbackfunction_changed({key: _key, obj: JSON.parse(_new).obj});
+			console.log("[LScash] Object changed: localStorage['" + _key + "']");
+		}
+	};
 
-		//store data in localStorage
-		if (compressed.length <= _storagesize) {
-			localStorage.setItem("__LScash_data__", compressed);
+	var handle_expire_on_load = function() {
+		var storage_list = LScash.get_stored_list();
+		if (storage_list.length == 0)
 			return true;
+
+		for (var id in storage_list) {
+			try {
+				var obj = JSON.parse(window.localStorage[storage_list[id]]);
+
+				if (obj.exp != undefined && obj.exp != 0)
+					//handle expire between pagevisits
+					if (new Date().getTime() >= obj.exp)
+						window.localStorage.removeItem(storage_list[id]);
+					else
+						_set_expire_event(storage_list[id], obj.exp);
+			} catch(e) {
+				console.log("[LScash] JSON parsing of object failed: localStorage['" + storage_list[id] + "']: " + window.localStorage[storage_list[id]]);
+			}
 		}
 
-		return false;
-	};
-
-	//returns JSON string of stored object
-	var _loadObject = function () {
-		_data_string = localStorage.getItem("__LScash_data__");
-
-		if (compressed = undefined)
-			return "";
-
-		if (_compression_type == DISABLE)
-			return compressed;
-		if (_compression_type == DEFAULT)
-			return decompress(compressed);
-		if (_compression_type == COMPATIBILITY)
-			return decompressFromUTF16(compressed);
+		return true;
 	};
 
 	var _set_expire_event = function(objectname_v, expiretime) {
-		window.setTimeout(function() {
-			//just delete, if expiretime wasn't changed
-			if (_data[objectname_v] != undefined) {
-				if (new Date().getTime() >= _data[objectname_v].exp && _data[objectname_v].exp != 0)
-					LScash.remove(objectname_v, {direct_storage: ENABLE});
-			}
-		}, expiretime - new Date().getTime());
+		_expire_events[objectname_v] = window.setTimeout(function() {
+			if (_callbackfunction_changed != undefined)
+				_callbackfunction_changed({key: objectname_v, obj: JSON.parse(window.localStorage[objectname_v]).obj});
+			console.log("[LScash] Data expired: localStorage['" + objectname_v + "']");
+			LScash.remove(objectname_v);
+		}, expiretime - new Date().getTime() );
 	}
 
 	//these values are private
 	var _compression_type = 0;
-	var _expiredate = 0;
-	var _storagesize = 0;
+	var _expire_events = {};
 
-	var _data = { //uncompressed data
-
-	};
-	var _data_string = "";
-
+	//event function list
+	var _callbackfunction_added   = undefined;
+	var _callbackfunction_removed = undefined;
+	var _callbackfunction_changed = undefined;
+	var _callbackfunction_expired = undefined;
 
 	return LScash;
 })();
