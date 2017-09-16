@@ -6,7 +6,7 @@
 
 var LScash = (function() {
 	var LScash = {
-		init : function(compression_type) {
+		init : function({compression_type} = {}) {
 			_compression_type = compression_type || DISABLE;
 
 			//add event for storage change
@@ -77,7 +77,7 @@ var LScash = (function() {
 
 			//if no new expiredate is set, use the old one
 			if (expiretime == undefined)
-				expiretime = this.get_expiretime(objectname_v);
+				expiretime = LScash.get_expiretime(objectname_v);
 
 			//try to store
 			try {
@@ -105,26 +105,49 @@ var LScash = (function() {
 			//false, if objectname is not given
 			if (window.localStorage[objectname_v] == undefined)
 				return false;
-
 			var obj = JSON.parse(window.localStorage[objectname_v]);
 
 			//false, if expired and "creation tab" is closed
-			if (new Date().getTime() >= obj.exp)
+			if (new Date().getTime() >= obj.exp && obj.exp != 0)
 				return false;
 
 			return obj.obj;
 		},
 
-		add_image : function() {
+		convert_to_base64_from_path : function(objectname, path, callback, {expiretime} = {}) {
+			var starttime = new Date().getTime();
+			var xhr = new XMLHttpRequest();
+			xhr.onload = function() {
+				var reader = new FileReader();
+				reader.onloadend = function() {
+					var result = "";
+					if (_compression_type == DISABLE)
+						result = reader.result;
+					if (_compression_type == DEFAULT)
+						result = LZString.compress(reader.result);
+					if (_compression_type == COMPATIBILITY)
+						result = LZString.compressToUTF16(reader.result);
 
+					//result
+					callback(objectname, result, {expiretime: expiretime});
+				}
+				reader.readAsDataURL(xhr.response);
+			};
+			xhr.open('GET', path);
+			xhr.responseType = 'blob';
+			xhr.send();
 		},
 
-		get_image : function() {
+		uncompress_image : function(compressed_string) {
+			var result = "";
+			if (_compression_type == DISABLE)
+				result = compressed_string;
+			if (_compression_type == DEFAULT)
+				result = LZString.decompress(compressed_string);
+			if (_compression_type == COMPATIBILITY)
+				result = LZString.decompressToUTF16(compressed_string);
 
-		},
-
-		update_image : function() {
-
+			return result;
 		},
 
 		remove : function(objectname_v) {
@@ -173,14 +196,14 @@ var LScash = (function() {
 
 			var obj = JSON.parse(window.localStorage[objectname_v]);
 
-			return this.update(objectname_v, obj.obj, expiretime);
+			return LScash.update(objectname_v, obj.obj, expiretime);
 		},
 
 		//returns size currently used in localStorage
 		get_size : function() {
 			var length = 0;
 
-			var list = this.get_stored_list();
+			var list = LScash.get_stored_list();
 			for (var id in list)
 				length += window.localStorage[list[id]].length;
 
@@ -218,7 +241,7 @@ var LScash = (function() {
 		}
 		if (_old != null && _new != null) {
 			if (_callbackfunction_changed != undefined)
-				_callbackfunction_changed({key: _key, obj: JSON.parse(_new).obj});
+				_callbackfunction_changed({key: _key, obj: JSON.parse(_old).obj});
 			console.log("[LScash] Object changed: localStorage['" + _key + "']");
 		}
 	};
