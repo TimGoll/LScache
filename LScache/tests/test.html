@@ -1,0 +1,16 @@
+<script type="text/javascript" src="../libs/lz-string.min.js"></script>
+<script type="text/javascript" src="../libs/LScache.js"></script>
+
+<script>
+    window.onload = function () {
+        LScache.init({compression_type: DEFAULT});
+
+        //add image, if not already done
+        LScache.convert_to_base64_from_path('testimage', 'test.jpg', LScache.add);
+
+        //read image from cash
+        document.getElementById('testimage').src = LScache.uncompress_image(LScache.get('testimage'));
+    };
+</script>
+
+<img id="testimage">
