@@ -73,8 +73,8 @@ LScache.update(objectname, object, {[expiretime]});
 ```js
 var my_string = "Hallo schöne Welt!";
 
-LScache.add('my_random_key', my_string); // >>> false
-LScache.add('my_string', my_string);     // >>> true
+LScache.update('my_random_key', my_string); // >>> false
+LScache.update('my_string', my_string);     // >>> true
 ```
 
 ### Element bekommen
@@ -184,4 +184,4 @@ LScache.get_stored_list();
 ### Datenkompression anhand eines Beispiels
 Dieses Bild hat auf der Festplatte eine Größe von ```676.260 Bytes```. Standardmäßig (unkompremiert) werden ```901.703 Bytes``` verwendet. Die ```DEFAULT```-Komprimierung erzielt eine Größe von ```396.865 Bytes```, die ```COMPATIBILITY```-Komprimierung jedoch ```658.796 Bytes```.
 
-![Beispielbild](https://github.com/TimDerGoll/webstuff/blob/master/LScache/tests/test.jpg "Beispielbild")
+![Beispielbild](https://github.com/TimGoll/LScache/blob/master/tests/test.jpg "Beispielbild")
